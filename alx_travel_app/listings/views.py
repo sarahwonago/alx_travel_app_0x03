@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from .models import Listing, Booking, Payment
 from .serializers import ListingSerializer, BookingSerializer
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from .tasks import send_booking_confirmation_email
 
 import os
 import requests
@@ -27,6 +28,16 @@ class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all()
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def perform_create(self, serializer):
+        booking = serializer.save(guest=self.request.user)
+        # Trigger background task
+        send_booking_confirmation_email.delay(
+            booking.guest.email,
+            booking.listing.title,
+            booking.check_in.strftime("%Y-%m-%d"),
+            booking.check_out.strftime("%Y-%m-%d"),
+        )
 
 
 class InitiatePaymentView(APIView):
